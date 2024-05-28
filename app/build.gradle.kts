@@ -85,5 +85,16 @@ dependencies {
 
     implementation("com.google.dagger:hilt-android:2.50")
     kapt(libs.hilt.android.compiler)
-    implementation("androidx.hilt:hilt-navigation-compose:1.0.0")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    implementation ("androidx.compose.material3:material3:1.2.1")
+    implementation ("androidx.compose.material3:material3-window-size-class:1.2.1")
+    implementation ("androidx.compose.material3:material3-adaptive-navigation-suite:1.0.0-alpha07")
+    implementation ("androidx.core:core-ktx:1.8.0")
+    implementation ("androidx.compose.ui:ui:1.3.0")
+
+    implementation ("androidx.navigation:navigation-compose:2.5.3")
+
+    implementation ("androidx.compose.runtime:runtime-livedata:1.6.7")
+
 }
