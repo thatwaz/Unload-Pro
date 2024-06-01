@@ -10,11 +10,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.thatwaz.unloadpro.ui.presentation.DisplayCounterScreen
 import com.thatwaz.unloadpro.ui.presentation.MainScreen
 import com.thatwaz.unloadpro.ui.presentation.SplashScreen
-import com.thatwaz.unloadpro.viewmodel.ClickCounterViewModel
+import com.thatwaz.unloadpro.ui.presentation.UnloadScreen
 import com.thatwaz.unloadpro.viewmodel.MainViewModel
+import com.thatwaz.unloadpro.viewmodel.UnloadViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -43,9 +43,9 @@ fun AppNavigation() {
             route = "displayCounter/{initialCartonCount}",
             arguments = listOf(navArgument("initialCartonCount") { type = NavType.IntType })
         ) { backStackEntry ->
-            val clickCounterViewModel: ClickCounterViewModel = hiltViewModel()
+            val unloadViewModel: UnloadViewModel = hiltViewModel()
             val initialCartonCount = backStackEntry.arguments?.getInt("initialCartonCount") ?: 0
-            DisplayCounterScreen(clickCounterViewModel, initialCartonCount)
+            UnloadScreen(unloadViewModel, initialCartonCount)
         }
     }
 }

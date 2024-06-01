@@ -97,4 +97,18 @@ dependencies {
 
     implementation ("androidx.compose.runtime:runtime-livedata:1.6.7")
 
+    androidTestImplementation ("androidx.compose.ui:ui-test-junit4-android:1.6.7:1.0")
+    debugImplementation ("androidx.compose.ui:ui-test-manifest")
+
+    // Hilt testing dependencies
+    androidTestImplementation ("com.google.dagger:hilt-android-testing:2.44")
+    kaptAndroidTest ("com.google.dagger:hilt-compiler:2.50")
+
+    // Compose UI testing dependencies
+    androidTestImplementation ("androidx.compose.ui:ui-test-junit4:1.6.7")
+    debugImplementation ("androidx.compose.ui:ui-test-manifest")
+
+    // Coroutines test dependencies
+    testImplementation ("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.1")
+
 }
