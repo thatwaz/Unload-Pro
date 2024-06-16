@@ -1,6 +1,7 @@
 package com.thatwaz.unloadpro.ui.presentation
 
 
+import android.text.format.DateUtils.formatElapsedTime
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,7 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.thatwaz.unloadpro.ui.common.CustomButton
 import com.thatwaz.unloadpro.ui.theme.LightSilver
-import com.thatwaz.unloadpro.ui.utils.formatElapsedTime
+import com.thatwaz.unloadpro.ui.utils.TimeUtils
+
 import com.thatwaz.unloadpro.viewmodel.UnloadViewModel
 
 
@@ -38,7 +40,12 @@ fun UnloadScreen(
 
     var isStarted by remember { mutableStateOf(false) }
     val count by unloadViewModel.count.collectAsState()
+    val batchTimes by unloadViewModel.batchTimes.collectAsState()
     val elapsedTime by unloadViewModel.elapsedTime.collectAsState()
+    val batchElapsedTime by unloadViewModel.batchElapsedTime.collectAsState()
+    val lastBatchDuration by unloadViewModel.lastBatchDuration.collectAsState()
+    val averageCartonsPerHour by unloadViewModel.averageCartonsPerHour.collectAsState()
+    val lastBatchTime by unloadViewModel.lastBatchTimeStamp.collectAsState()
 
 
     LaunchedEffect(isStarted) {
@@ -62,13 +69,14 @@ fun UnloadScreen(
                 .padding(top = 180.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Main Chronometer
             Text(
                 text = formatElapsedTime(elapsedTime),
                 style = MaterialTheme.typography.displayMedium
             )
-
+            //batch chronometer
             Text(
-                text = "00:00",
+                text = formatElapsedTime(batchElapsedTime),
                 style = MaterialTheme.typography.displaySmall.copy(
                     fontSize = MaterialTheme.typography.displaySmall.fontSize * 0.7
                 )
@@ -85,7 +93,7 @@ fun UnloadScreen(
                 modifier = Modifier.padding(top = 8.dp)
             )
             Text(
-                text = "Last batch added at 4:55 am",
+                text = "Last batch added at $lastBatchTime",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 8.dp)
             )
@@ -96,9 +104,9 @@ fun UnloadScreen(
                     .fillMaxWidth()
                     .padding(top = 16.dp)
             ) {
-                DisplayMetric("6m 32s", "Last Batch Speed")
-                DisplayMetric("897", "Avg CPH")
-                DisplayMetric(unloadViewModel.getAverageBatchTime(), "Avg Batch Time")
+                DisplayMetric(TimeUtils.formatBatchDuration(lastBatchDuration), "Last Batch Speed")
+                DisplayMetric("$averageCartonsPerHour", "Avg CPH")
+                DisplayMetric(TimeUtils.getAverageBatchTime(batchTimes), "Avg Batch Time")
             }
 
             CustomButton(
@@ -129,7 +137,7 @@ fun UnloadScreen(
             }
 
             Text(
-                text = "Est. Completion Time is ${unloadViewModel.getEstimatedCompletionTime()}",
+                text = "Est. Completion Time is ${TimeUtils.getEstimatedCompletionTime(count, batchTimes)}",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 50.dp)
             )
