@@ -1,7 +1,7 @@
 package com.thatwaz.unloadpro.ui.presentation
 
-
 import android.text.format.DateUtils.formatElapsedTime
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,34 +11,35 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import com.thatwaz.unloadpro.ui.common.CustomButton
 import com.thatwaz.unloadpro.ui.theme.LightSilver
 import com.thatwaz.unloadpro.ui.utils.TimeUtils
-
 import com.thatwaz.unloadpro.viewmodel.UnloadViewModel
 
 
 @Composable
 fun UnloadScreen(
     unloadViewModel: UnloadViewModel,
-    initialCartonCount: Int
+    initialCartonCount: Int,
+    navController: NavController
 ) {
-
-
-    var isStarted by remember { mutableStateOf(false) }
+    var isStarted by rememberSaveable { mutableStateOf(false) }
     val count by unloadViewModel.count.collectAsState()
     val batchTimes by unloadViewModel.batchTimes.collectAsState()
     val elapsedTime by unloadViewModel.elapsedTime.collectAsState()
@@ -46,12 +47,17 @@ fun UnloadScreen(
     val lastBatchDuration by unloadViewModel.lastBatchDuration.collectAsState()
     val averageCartonsPerHour by unloadViewModel.averageCartonsPerHour.collectAsState()
     val lastBatchTime by unloadViewModel.lastBatchTimeStamp.collectAsState()
-
+    val showAlertDialog by unloadViewModel.showAlertDialog.collectAsState()
+    val reasons = listOf("Add Line", "Misc Noncon", "Move Pipo", "Slow Line", "Spill").sorted()
+    var selectedReason by rememberSaveable { mutableStateOf(reasons.first()) }
 
     LaunchedEffect(isStarted) {
         if (isStarted) {
+            Log.i("DOH!", "Is started is $isStarted")
             unloadViewModel.resetCount(initialCartonCount)
             unloadViewModel.startTimer()
+            unloadViewModel.startBatchTimer()
+//            unloadViewModel.addBatchDelay("Test")
         } else {
             unloadViewModel.stopTimer()
         }
@@ -62,7 +68,6 @@ fun UnloadScreen(
             .fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        // Full screen content
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -74,14 +79,13 @@ fun UnloadScreen(
                 text = formatElapsedTime(elapsedTime),
                 style = MaterialTheme.typography.displayMedium
             )
-            //batch chronometer
+            // Batch chronometer
             Text(
                 text = formatElapsedTime(batchElapsedTime),
                 style = MaterialTheme.typography.displaySmall.copy(
                     fontSize = MaterialTheme.typography.displaySmall.fontSize * 0.7
                 )
             )
-
             Text(
                 text = "$count",
                 style = MaterialTheme.typography.headlineLarge,
@@ -97,7 +101,6 @@ fun UnloadScreen(
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 8.dp)
             )
-
             Row(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 modifier = Modifier
@@ -108,14 +111,15 @@ fun UnloadScreen(
                 DisplayMetric("$averageCartonsPerHour", "Avg CPH")
                 DisplayMetric(TimeUtils.getAverageBatchTime(batchTimes), "Avg Batch Time")
             }
-
             CustomButton(
-                onClick = { unloadViewModel.decrementCount() },
+                onClick = {
+                    unloadViewModel.decrementCount()
+                    unloadViewModel.addBatchTime(batchElapsedTime)
+                          },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 50.dp, start = 25.dp, end = 25.dp)
             )
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -129,13 +133,16 @@ fun UnloadScreen(
                     Text("Count")
                 }
                 Button(
-                    onClick = { /* TODO: Implement action */ },
+//                    onClick = {
+////                        val batchTimesJson = unloadViewModel.getSerializedBatchTimes()
+                        onClick = { navController.navigate("unloadStats/${unloadViewModel.getSerializedBatchDelays()}")
+
+                              },
                     modifier = Modifier.padding(end = 25.dp)
                 ) {
                     Text("Finalize")
                 }
             }
-
             Text(
                 text = "Est. Completion Time is ${TimeUtils.getEstimatedCompletionTime(count, batchTimes)}",
                 style = MaterialTheme.typography.bodyLarge,
@@ -157,6 +164,52 @@ fun UnloadScreen(
                 }
             }
         }
+
+        // Alert dialog for delay reasons
+        if (showAlertDialog) {
+            AlertDialog(
+                onDismissRequest = { unloadViewModel.dismissAlertDialog() },
+                title = { Text("Select Reason for Delay") },
+                text = {
+                    Column {
+                        reasons.forEach { reason ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedReason = reason
+                                    }
+                            ) {
+                                RadioButton(
+                                    selected = (reason == selectedReason),
+                                    onClick = { selectedReason = reason }
+                                )
+                                Text(
+                                    text = reason,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            Log.i("DOH!", "Selected reason: $selectedReason")
+                            unloadViewModel.addBatchDelay(selectedReason)
+                        }
+                    ) {
+                        Text("OK")
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { unloadViewModel.dismissAlertDialog() }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -173,8 +226,210 @@ fun DisplayMetric(value: String, label: String) {
             style = MaterialTheme.typography.bodySmall
         )
     }
-
 }
+
+
+
+//@Composable
+//fun UnloadScreen(
+//    unloadViewModel: UnloadViewModel,
+//    initialCartonCount: Int,
+//    navController: NavController
+//) {
+//
+//
+//    var isStarted by rememberSaveable { mutableStateOf(false) }
+//    val count by unloadViewModel.count.collectAsState()
+//    val batchTimes by unloadViewModel.batchTimes.collectAsState()
+//    val elapsedTime by unloadViewModel.elapsedTime.collectAsState()
+//    val batchElapsedTime by unloadViewModel.batchElapsedTime.collectAsState()
+//    val lastBatchDuration by unloadViewModel.lastBatchDuration.collectAsState()
+//    val averageCartonsPerHour by unloadViewModel.averageCartonsPerHour.collectAsState()
+//    val lastBatchTime by unloadViewModel.lastBatchTimeStamp.collectAsState()
+////    val batchDelays by unloadViewModel.batchDelays.collectAsState()
+//
+//    val showAlertDialog by unloadViewModel.showAlertDialog.collectAsState()
+//    val reasons = listOf("Add Line", "Misc Noncon", "Move Pipo", "Slow Line", "Spill").sorted()
+////    var selectedReason by remember { mutableStateOf(reasons.first()) }
+//    var selectedReason by rememberSaveable { mutableStateOf(reasons.first()) }
+//
+//
+//
+//    LaunchedEffect(isStarted) {
+//        if (isStarted) {
+//            Log.i("DOH!", "Is started is $isStarted")
+//            unloadViewModel.resetCount(initialCartonCount)
+//            unloadViewModel.startTimer()
+//            unloadViewModel.startBatchTimer()
+//        } else {
+//            unloadViewModel.stopTimer()
+//        }
+//    }
+//
+//
+//    Box(
+//        modifier = Modifier
+//            .fillMaxSize(),
+//        contentAlignment = Alignment.Center
+//    ) {
+//        // Full screen content
+//        Column(
+//            modifier = Modifier
+//                .align(Alignment.TopCenter)
+//                .padding(top = 180.dp),
+//            horizontalAlignment = Alignment.CenterHorizontally
+//        ) {
+//            // Main Chronometer
+//            Text(
+//                text = formatElapsedTime(elapsedTime),
+//                style = MaterialTheme.typography.displayMedium
+//            )
+//            //batch chronometer
+//            Text(
+//                text = formatElapsedTime(batchElapsedTime),
+//                style = MaterialTheme.typography.displaySmall.copy(
+//                    fontSize = MaterialTheme.typography.displaySmall.fontSize * 0.7
+//                )
+//            )
+//
+//            Text(
+//                text = "$count",
+//                style = MaterialTheme.typography.headlineLarge,
+//                modifier = Modifier.padding(top = 32.dp)
+//            )
+//            Text(
+//                text = "Cartons Remaining out of $initialCartonCount",
+//                style = MaterialTheme.typography.bodyLarge,
+//                modifier = Modifier.padding(top = 8.dp)
+//            )
+//            Text(
+//                text = "Last batch added at $lastBatchTime",
+//                style = MaterialTheme.typography.bodySmall,
+//                modifier = Modifier.padding(top = 8.dp)
+//            )
+//
+//            Row(
+//                horizontalArrangement = Arrangement.SpaceEvenly,
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .padding(top = 16.dp)
+//            ) {
+//                DisplayMetric(TimeUtils.formatBatchDuration(lastBatchDuration), "Last Batch Speed")
+//                DisplayMetric("$averageCartonsPerHour", "Avg CPH")
+//                DisplayMetric(TimeUtils.getAverageBatchTime(batchTimes), "Avg Batch Time")
+//            }
+//
+//            CustomButton(
+//                onClick = { unloadViewModel.decrementCount() },
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .padding(top = 50.dp, start = 25.dp, end = 25.dp)
+//            )
+//
+//            Row(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .padding(top = 25.dp),
+//                horizontalArrangement = Arrangement.SpaceBetween
+//            ) {
+//                Button(
+//                    onClick = { /* TODO: Implement action */ },
+//                    modifier = Modifier.padding(start = 25.dp)
+//                ) {
+//                    Text("Count")
+//                }
+//                Button(
+//                    onClick = { navController.navigate("unloadStats") },
+//                    modifier = Modifier.padding(end = 25.dp)
+//                ) {
+//                    Text("Finalize")
+//                }
+//            }
+//
+//            Text(
+//                text = "Est. Completion Time is ${TimeUtils.getEstimatedCompletionTime(count, batchTimes)}",
+//                style = MaterialTheme.typography.bodyLarge,
+//                modifier = Modifier.padding(top = 50.dp)
+//            )
+//        }
+//
+//        // Overlay to mute the screen before starting unload
+//        if (!isStarted) {
+//            Box(
+//                modifier = Modifier
+//                    .fillMaxSize()
+//                    .background(LightSilver.copy(alpha = 0.8f))
+//                    .clickable(enabled = false, onClick = {}),
+//                contentAlignment = Alignment.Center
+//            ) {
+//                Button(onClick = { isStarted = true }) {
+//                    Text("Start Unload")
+//                }
+//            }
+//        }
+//        // Alert dialog for delay reasons
+//        if (showAlertDialog) {
+//            AlertDialog(
+//                onDismissRequest = { unloadViewModel.dismissAlertDialog() },
+//                title = { Text("Select Reason for Delay") },
+//                text = {
+//                    Column {
+//                        reasons.forEach { reason ->
+//                            Row(
+//                                verticalAlignment = Alignment.CenterVertically,
+//                                modifier = Modifier
+//                                    .fillMaxWidth()
+//                                    .clickable {
+//                                        selectedReason = reason
+//                                    }
+//                            ) {
+//                                RadioButton(
+//                                    selected = (reason == selectedReason),
+//                                    onClick = { selectedReason = reason }
+//                                )
+//                                Text(
+//                                    text = reason,
+//                                    modifier = Modifier.padding(start = 8.dp)
+//                                )
+//                            }
+//                        }
+//                    }
+//                },
+//                confirmButton = {
+//                    Button(
+//                        onClick = {
+//                            unloadViewModel.addBatchDelay(selectedReason)
+//                            Log.i("DOH!","reason is $selectedReason")
+//                        }
+//                    ) {
+//                        Text("OK")
+//                    }
+//                },
+//                dismissButton = {
+//                    Button(onClick = { unloadViewModel.dismissAlertDialog() }) {
+//                        Text("Cancel")
+//                    }
+//                }
+//            )
+//        }
+//    }
+//}
+//
+//@Composable
+//fun DisplayMetric(value: String, label: String) {
+//    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+//        Text(
+//            text = value,
+//            style = MaterialTheme.typography.bodyMedium,
+//            modifier = Modifier.padding(bottom = 4.dp)
+//        )
+//        Text(
+//            text = label,
+//            style = MaterialTheme.typography.bodySmall
+//        )
+//    }
+//
+//}
 
 
 

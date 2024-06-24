@@ -2,6 +2,7 @@ package com.thatwaz.unloadpro.viewmodel
 
 
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
@@ -14,10 +15,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import kotlin.math.ceil
 
 
+@Serializable
+data class BatchDelay(
+    val batchNumber: Int,
+    val duration: Long,
+    val reason: String
+)
 
 @HiltViewModel
 class UnloadViewModel @Inject constructor(
@@ -38,7 +48,7 @@ class UnloadViewModel @Inject constructor(
 
     // MutableStateFlow to hold the durations of all completed batches in seconds
     private val _batchTimes = MutableStateFlow<List<Long>>(emptyList())
-    val batchTimes: StateFlow<List<Long>> = _batchTimes
+    val batchTimes : StateFlow<List<Long>> = _batchTimes
 
     // MutableStateFlow to hold the duration of the last completed batch in seconds
     private val _lastBatchDuration = MutableStateFlow(0L)
@@ -52,14 +62,68 @@ class UnloadViewModel @Inject constructor(
     private val _lastBatchTimeStamp = MutableStateFlow("")
     val lastBatchTimeStamp: StateFlow<String> = _lastBatchTimeStamp
 
+    // MutableStateFlow to hold whether the alert dialog should be shown
+    private val _showAlertDialog = MutableStateFlow(false)
+    val showAlertDialog: StateFlow<Boolean> = _showAlertDialog
+
     private var lastBatchTime = 0L
     private var initialCartonCount: Int = 0
     private var timerJob: Job? = null
     private var batchTimerJob: Job? = null
 
+    // MutableStateFlow to hold the list of batch delays
+//    private val _batchDelays = MutableStateFlow<List<BatchDelay>>(emptyList())
+//    val batchDelays: StateFlow<List<BatchDelay>> = _batchDelays
+
+
+    private var currentBatchNumber = 1
+
+
+    private val _batchDelays = MutableStateFlow<List<BatchDelay>>(emptyList())
+    val batchDelays: StateFlow<List<BatchDelay>> get() = _batchDelays
+    private var piecesProcessed = 0
+    fun getSerializedBatchTimes(): String {
+        return Json.encodeToString(_batchTimes.value)
+    }
+
+    private var timersStarted = false
+    private var initialCountSet = false
+
+    private var delaySequence = 1  // This will keep track of the sequence of delays
+
     init {
         listenToCountChanges()
+//        addBatchDelay("DOH!")
+//        startTimer() // Ensure the timer starts when the ViewModel is initialized
+//        startBatchTimer()
     }
+
+
+    fun getSerializedBatchDelays(): String {
+        return Json.encodeToString(_batchDelays.value)
+    }
+
+
+    fun addBatchDelay(reason: String) {
+        val duration = _lastBatchDuration.value
+        piecesProcessed = initialCartonCount - _count.value
+        val batchDelay = BatchDelay(piecesProcessed, duration, reason)
+        Log.i("DOH!", "Adding delay: $batchDelay")
+        _batchDelays.value = _batchDelays.value + batchDelay
+        _showAlertDialog.value = false
+        Log.i("DOH!", "Delays after adding: ${_batchDelays.value}")
+    }
+
+//    fun addBatchDelay(reason: String) {
+//        val duration = _lastBatchDuration.value
+//        val batchDelay = BatchDelay(currentBatchNumber, duration, reason)
+//        Log.i("DOH!", "Adding delay: $batchDelay")
+//        _batchDelays.value = _batchDelays.value + batchDelay
+//        currentBatchNumber++
+//        _showAlertDialog.value = false
+//        Log.i("DOH!", "Delays after adding: ${_batchDelays.value}")
+//    }
+
 
     private fun listenToCountChanges() {
         FirestoreHelper.getCountRef(firestore).addSnapshotListener { snapshot, e ->
@@ -85,19 +149,37 @@ class UnloadViewModel @Inject constructor(
         }
     }
 
+
+    // Reset the batch number when resetting the count
+
+    // Update resetCount to reset batch number and other relevant fields
+
     fun resetCount(initialCartonCount: Int) {
-        this.initialCartonCount = initialCartonCount
-        viewModelScope.launch {
-            try {
-                FirestoreHelper.updateCount(firestore, initialCartonCount)
-                _count.value = initialCartonCount
-                lastBatchTime = System.currentTimeMillis()
-                _batchTimes.value = emptyList() // Reset batch times
-                resetBatchTimer()
-            } catch (e: Exception) {
-                ErrorHandler.handleError(e)
+        if (!initialCountSet) {
+            this.initialCartonCount = initialCartonCount
+            initialCountSet = true
+            piecesProcessed = 0  // Reset pieces processed
+            viewModelScope.launch {
+                try {
+                    FirestoreHelper.updateCount(firestore, initialCartonCount)
+                    _count.value = initialCartonCount
+                    lastBatchTime = System.currentTimeMillis()
+                    _batchTimes.value = emptyList() // Reset batch times
+                    resetBatchTimer()
+                } catch (e: Exception) {
+                    ErrorHandler.handleError(e)
+                }
             }
         }
+    }
+
+
+
+
+    // Method to handle batch time addition
+    fun addBatchTime(batchTime: Long) {
+        _batchTimes.value = _batchTimes.value + batchTime
+        Log.i("DOH!","Times of each batch are: ${_batchTimes.value}")
     }
 
     fun decrementCount() {
@@ -116,6 +198,7 @@ class UnloadViewModel @Inject constructor(
                     resetBatchTimer()
                     updateAverageCartonsPerHour()
                     updateEstimatedCompletionTime()
+                    checkBatchDuration(batchDuration)
                 }
             } catch (e: Exception) {
                 ErrorHandler.handleError(e)
@@ -123,37 +206,77 @@ class UnloadViewModel @Inject constructor(
         }
     }
 
+//    fun decrementCount() {
+//        viewModelScope.launch {
+//            try {
+//                val currentCount = _count.value
+//                if (currentCount > 0) {
+//                    val currentTime = System.currentTimeMillis()
+//                    val batchDuration = (currentTime - lastBatchTime) / 1000
+//                    _batchTimes.value = _batchTimes.value + batchDuration
+//                    _lastBatchDuration.value = batchDuration
+//                    lastBatchTime = currentTime
+//                    _lastBatchTimeStamp.value = TimeUtils.getCurrentTimeString(currentTime)
+//                    FirestoreHelper.updateCount(firestore, currentCount - 100)
+//                    _count.value = currentCount - 100
+//                    resetBatchTimer()
+//                    updateAverageCartonsPerHour()
+//                    updateEstimatedCompletionTime()
+//                    checkBatchDuration(batchDuration)
+//                }
+//            } catch (e: Exception) {
+//                ErrorHandler.handleError(e)
+//            }
+//        }
+//    }
+
+    private fun checkBatchDuration(batchDuration: Long) {
+        if (batchDuration > 1 * 2) { // 8 minutes in seconds for production, 2 seconds for testing
+            Log.i("DOH!","Batch duration is $batchDuration")
+            _showAlertDialog.value = true
+        }
+    }
+
+
     fun startTimer() {
-        timerJob?.cancel()
-        timerJob = viewModelScope.launch {
-            _elapsedTime.value = 0L
-            while (true) {
-                delay(1000L)
-                _elapsedTime.value += 1L
+        if (timerJob == null) {
+            timerJob = viewModelScope.launch {
+                while (true) {
+                    delay(1000L)
+                    _elapsedTime.value += 1L
+                }
             }
         }
-        startBatchTimer()
     }
+
+
+    fun startBatchTimer() {
+        if (batchTimerJob == null) {
+            batchTimerJob = viewModelScope.launch {
+                while (true) {
+                    delay(1000L)
+                    _batchElapsedTime.value += 1L
+                }
+            }
+        }
+    }
+
+
+
 
     fun stopTimer() {
         timerJob?.cancel()
         batchTimerJob?.cancel()
     }
 
-    fun startBatchTimer() {
-        batchTimerJob?.cancel()
-        batchTimerJob = viewModelScope.launch {
-            _batchElapsedTime.value = 0L
-            while (true) {
-                delay(1000L)
-                _batchElapsedTime.value += 1L
-            }
-        }
-    }
 
     fun resetBatchTimer() {
         _batchElapsedTime.value = 0L
         startBatchTimer()
+    }
+
+    fun dismissAlertDialog() {
+        _showAlertDialog.value = false
     }
 
     private fun updateAverageCartonsPerHour() {
@@ -167,6 +290,7 @@ class UnloadViewModel @Inject constructor(
         }
     }
 }
+
 
 
 

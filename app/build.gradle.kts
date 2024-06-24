@@ -5,6 +5,7 @@ plugins {
     kotlin("kapt")
     id("com.google.dagger.hilt.android")
     id("com.google.gms.google-services")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 
@@ -68,6 +69,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.database)
+    implementation(libs.androidx.lifecycle.runtime.compose.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -99,6 +101,8 @@ dependencies {
 
     androidTestImplementation ("androidx.compose.ui:ui-test-junit4-android:1.6.7:1.0")
     debugImplementation ("androidx.compose.ui:ui-test-manifest")
+
+    implementation ("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 
     // Hilt testing dependencies
     androidTestImplementation ("com.google.dagger:hilt-android-testing:2.44")
